@@ -126,7 +126,7 @@ def commited_tasks_alef():
     @task()
     def send_mails(orders):
         for mail_adress in orders.keys():
-            send_mail_if_not_empty(to=['snir-y@regba.co.il'],cc = [] , qry_result = orders[mail_adress])
+            send_mail_if_not_empty(to=[mail_adress], cc = ['snir-y@regba.co.il', 'lior-r@regba.co.il'] , qry_result = orders[mail_adress])
             sleep(2)
         return None
     

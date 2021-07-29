@@ -53,8 +53,8 @@ def send_mail_if_not_empty(mailadress, qry_result):
     # refactor this
     mail_url = '{}/function/mail'.format(faas_url)  # prod
     mail_data = {
-        'recipient': ['snir-y@regba.co.il'],  # [mailadress],
-        # 'cc': ['snir-y@regba.co.il', 'lior-r@regba.co.il'],
+        'recipient': [mailadress],
+        'cc': ['snir-y@regba.co.il', 'lior-r@regba.co.il'],
         'subject': 'בחירת מעצבת לא תקינה בהזמנות משלימים - הודעה אוטומטית ',
         # notice mail_body_mashlim is global
         'content': mail_body_mashlim + r_table.content.decode('utf-8'),
@@ -91,7 +91,7 @@ def check_designer_mashlimim():
     @task()
     def send_mails(orders_by_manager):
         for mail_adress in orders_by_manager.keys():
-            send_mail_if_not_empty('snir-y@regba.co.il', orders_by_manager[mail_adress])
+            send_mail_if_not_empty(mail_adress, orders_by_manager[mail_adress])
         return None
 
 

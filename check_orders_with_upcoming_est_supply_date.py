@@ -46,8 +46,8 @@ def send_mail_if_not_empty(mailadress, qry_result):
     # refactor this
     mail_url = '{}/function/mail'.format(faas_url)  # prod
     mail_data = {
-        'recipient': ['snir-y@regba.co.il'],
-        # 'cc': ['snir-y@regba.co.il'], #  'lior-r@regba.co.il'
+        'recipient': [mailadress],
+        'cc': ['snir-y@regba.co.il' ,  'lior-r@regba.co.il'],
         'subject': 'הזמנות שמתקרבות לתאריך האספקה המשוער שלהן - הודעה אוטומטית ',
         # notice mail_body_old_supplydate is global
         'content': mail_body_upcoming_supplydate + r_table.content.decode('utf-8'),
@@ -84,7 +84,7 @@ def check_orders_with_upcoming_est_supply_date():
     @task()
     def send_mails(orders_by_manager):
         for mail_adress in orders_by_manager.keys():
-            send_mail_if_not_empty('snir-y@regba.co.il', orders_by_manager[mail_adress])
+            send_mail_if_not_empty( mail_adress, orders_by_manager[mail_adress])
         return None
 
 
