@@ -7,24 +7,14 @@ import os
 
 from datetime import datetime, timedelta
 from time import sleep
-from airflow import DAG
-from airflow.operators.dummy_operator import DummyOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.decorators import dag, task
+from airflow.utils.dates import days_ago
 import requests
 import json
+from erpChecks.queries import qry_get_commited_task_alef_from_previous_day, qry_get_managers, qry_get_roles_in_manager_branch
+from erpChecks.mail_body import mail_body_task_alef
 
-try:
-    import erpChecks.queries as queries
-except ImportWarning:
-    import queries
-try:
-    import erpChecks.mail_body as mail_body
-except ImportWarning:
-    import mail_body
-try:
-    import erpChecks.tools as tools
-except ImportWarning:
-    import tools
+
 
 
 # =============== set start_date and configuration variables =================
@@ -38,136 +28,112 @@ default_args = {
     'retry_delay': timedelta(minutes=1)
 }
 
-default_args['faas_url'] = "http://" + os.environ['LOCAL_SRV_IP']+ ":8080"   # 'http://regbais:8080'   # prod
-default_args['d_con'] = {'DB_NAME': 'WiseERPRegba',
-                         'DB_SRV': '172.16.11.5'}
+faas_url = "http://" + os.environ['LOCAL_SRV_IP']+ ":8080"   # 'http://regbais:8080'   # prod
+d_con = {'DB_NAME': 'WiseERPRegba',
+        'DB_SRV': '172.16.11.5'}
 
-default_args['dag_name'] = 'commited_tasks_alef'
-default_args['dag_desc'] = 'checks commites tasks concerning master plan for production'
+default_args['dag_desc'] = 'checks commits tasks concerning master plan for production'
 
 mail_name = 'mail_body_task_alef'
-default_args['mail_subject'] = 'סריקת תוכנית סופית להזמנה - הודעה אוטומטית'
-default_args['mail_body'] = getattr(mail_body, mail_name)
-default_args['mail_footer'] = 'DAG: ERPChecks - ' + default_args['dag_name']
 
 
-Managers = tools.connect_and_query(
-                        qry=queries.qry_get_managers,
-                        params=None,
-                        d_con=default_args['d_con'], faas_url=default_args['faas_url'])
+def connect_and_query( qry, qry_params, d_con=d_con):
+    query_data = {'d_con': d_con,
+                'qry': qry,
+                'qry_params': qry_params,  # [userindex],
+                'lower_keys': False}
+    r = requests.post('{}/function/mssql'.format(faas_url),  # prod
+                    data=json.dumps(query_data))
+    if r.status_code != 200:
+        return None
+    qry_result = r.json()
+    if qry_result is None or 'data_result' not in qry_result.keys():
+        return None
+    # print(qry_result)
+    return qry_result['data_result']
 
-default_args['Managers'] = [(x['UserIndex'], x['EmployeeEmail']) for x in Managers]
+def send_mail_if_not_empty(to, cc, qry_result):
+    if qry_result is None:
+        return None
+    json2tbl_url = '{}/function/json2tbl'.format(faas_url)  # prod
+    req = {'table': qry_result}
+    r_table = requests.post(json2tbl_url, data=json.dumps(req))
+    # refactor this
+    mail_url = '{}/function/mail'.format(faas_url)  # prod
+    mail_data = {
+        'recipient': to, # list
+        'cc': cc, #['snir-y@regba.co.il', 'lior-r@regba.co.il'],
+        'subject': 'הזמנות עם תאריך אספקה משוער לא תקין - הודעה אוטומטית ',
+        'content': mail_body_task_alef + r_table.content.decode('utf-8'),
+        'attachments': [],
+        'footer': 'DAG: ERPChecks -  check_orders_with_old_est_supplydate'
+    }
+    mail_data['title'] = mail_data['subject']
+
+    r_mail = requests.post(mail_url, data=json.dumps(mail_data))
+    return r_mail.status_code
+
 
 # ============== Operators =================
 
-
-def managerial(manager, subject, body, footer,  d_con, faas_url):
-    manager_index = manager[0]
-    manager_mail = manager[1]
-
-    qry_result = tools.connect_and_query(
-        qry=queries.qry_get_commited_task_alef_from_previous_day,
-        params=[manager_index, None],  # getting all orders in branch
-        d_con=d_con, faas_url=faas_url)
-
-    desk_data = tools.connect_and_query(
-        qry=queries.qry_get_roles_in_manager_branch,
-        params=[manager_index, 14],  # 14=desk
-        d_con=d_con, faas_url=faas_url)
-    if desk_data is None or len(desk_data) == 0:
-        desk_mails = []
-    else:
-        desk_mails = [x['EmployeeMail'] for x in desk_data]
-
-    desk_mails.append(manager_mail)
-    cc = ['snir-y@regba.co.il', 'heftsi-b@regba.co.il']
-
-    ret = tools.send_mail_if_not_empty(
-        mailadress_to=desk_mails,
-        mailadress_cc=cc,
-        subject=subject,
-        body=body,
-        qry_result=qry_result,
-        footer=footer,
-        faas_url=faas_url)
-    return ret
-
-
-def designerial(manager, subject, body, footer,  d_con, faas_url):
-    manager_index = manager[0]
-    manager_mail = manager[1]
-
-    designer_data = tools.connect_and_query(
-        qry=queries.qry_get_roles_in_manager_branch,
-        params=[manager_index, 13],  # 13=designer
-        d_con=default_args['d_con'], faas_url=default_args['faas_url'])
-    if designer_data is None or len(designer_data) == 0:
+@dag(default_args=default_args, schedule_interval=None, start_date=days_ago(0))
+def commited_tasks_alef():
+    
+    @task
+    def get_managers():
+        query_data = {'d_con': d_con,
+                    'qry': qry_get_managers}
+        r = requests.post('{}/function/mssql'.format(faas_url),
+                        data=json.dumps(query_data))
+        qry_result = r.json()
+        return qry_result['data_result']
+    
+    @task()
+    def get_orders_by_manager(managers):
+        orders = {}
+        for m in managers:
+            data = connect_and_query(qry_get_commited_task_alef_from_previous_day, [m['UserIndex'], ''])  
+            if data is None or len(data)==0:
+                continue
+            else:
+                orders[m['EmployeeEmail']] = data
+                desk_users = connect_and_query(qry_get_roles_in_manager_branch, [m['UserIndex'], 14]) # 14=desk
+                if desk_users is None or len(desk_users) == 0:
+                    desk_mails = []
+                else:
+                    desk_mails = [x['EmployeeMail'] for x in desk_users]           
+                for x in desk_mails:
+                    orders[x] = data
+        return orders
+    
+    @task()
+    def get_orders_by_designer(managers):
+        orders = {}
+        for m in managers:
+            designers = connect_and_query(qry_get_roles_in_manager_branch, [m['UserIndex'], 13] )  # 13=designer
+            if designers is None or len(designers) == 0:
+                continue
+            for designer in designers:
+                designer_orders = connect_and_query(
+                    qry = qry_get_commited_task_alef_from_previous_day,
+                    qry_params = [None, designer['EmployeeUserIndex']]
+                    )
+                if designer_orders is None or len(designer_orders) == 0:
+                    continue
+                orders[designer['EmployeeMail']] = designer_orders
+        return orders 
+    
+    @task()
+    def send_mails(orders):
+        for mail_adress in orders.keys():
+            send_mail_if_not_empty(to=['snir-y@regba.co.il'],cc = [] , qry_result = orders[mail_adress])
+            sleep(2)
         return None
+    
+    Managers = get_managers()
+    manager_orders = get_orders_by_manager(Managers)
+    send_mails(manager_orders)
+    designer_orders = get_orders_by_designer(Managers)
+    send_mails(designer_orders)
 
-    ret_list = []
-    for designer in designer_data:
-        designer_index = designer['EmployeeUserIndex']
-        designer_mail = designer['EmployeeMail']
-
-        sleep(1)
-
-        qry_result = tools.connect_and_query(
-            qry=queries.qry_get_commited_task_alef_from_previous_day,
-            params=[None, designer_index],  # getting all orders in branch for specific designer
-            d_con=d_con,
-            faas_url=faas_url)
-
-        sleep(10)
-
-        ret = tools.send_mail_if_not_empty(
-                mailadress_to=[designer_mail],
-                mailadress_cc=[],  # 'snir-y@regba.co.il',
-                subject=subject,
-                body=body,
-                footer=footer,
-                qry_result=qry_result,
-                faas_url=faas_url)
-        ret_list.append((designer_index, ret))
-
-    return ret
-
-# ================ DAG ===================
-
-
-dag = DAG(default_args['dag_name'],
-          description=default_args['dag_desc'],
-          default_args=default_args,
-          schedule_interval='1 22 * * *',
-          catchup=False)
-
-with dag:
-    start = DummyOperator(task_id='start')
-    for manager in default_args['Managers']:
-
-        branch_op = PythonOperator(
-            task_id='branch_manager_{0}'.format(manager[0]),
-            python_callable=managerial,
-            dag=dag,
-            op_args=[
-                manager,
-                default_args['mail_subject'],
-                default_args['mail_body'],
-                default_args['mail_footer'],
-                default_args['d_con'],
-                default_args['faas_url']],
-            provide_context=False)
-
-        designer_op = PythonOperator(
-            task_id='designer_op_{0}'.format(manager[0]),
-            python_callable=designerial,
-            dag=dag,
-            op_args=[
-                manager,
-                default_args['mail_subject'],
-                default_args['mail_body'],
-                default_args['mail_footer'],
-                default_args['d_con'],
-                default_args['faas_url']],
-            provide_context=False)
-
-        start >> branch_op >> designer_op
+main_dag = commited_tasks_alef()

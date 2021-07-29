@@ -1,19 +1,13 @@
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.dummy_operator import DummyOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.decorators import dag, task
+from airflow.utils.dates import days_ago
 import os
 import requests
 import json
+from erpChecks.queries import qry_get_managers, qry_get_orders_with_bad_designer_mashlim
+from erpChecks.mail_body import mail_body_mashlim
 
-try:
-    from erpChecks.queries import qry_get_managers, qry_get_orders_with_bad_designer_mashlim
-except ImportWarning :
-    from queries import qry_get_managers, qry_get_orders_with_bad_designer_mashlim
-try:
-    from erpChecks.mail_body import mail_body_mashlim
-except ImportWarning:
-    from mail_body import mail_body_mashlim
 
 default_args = {
     'owner': 'Snir',
@@ -30,19 +24,6 @@ faas_url = 'http://' + os.environ['LOCAL_SRV_IP'] + ':8080'  # prod
 d_con = {'DB_NAME': 'WiseERPRegba',
          'DB_SRV': '172.16.11.5'}
 
-
-def get_managers():
-    query_data = {'d_con': d_con,
-                  'qry': qry_get_managers}
-    r = requests.post('{}/function/mssql'.format(faas_url),
-                      data=json.dumps(query_data))
-    qry_result = r.json()
-    return qry_result['data_result']
-
-
-Managers = get_managers()
-Managers = [(x['UserIndex'], x['EmployeeEmail']) for x in Managers]
-default_args['Managers'] = Managers
 
 
 def connect_and_query(userindex):
@@ -62,8 +43,7 @@ def connect_and_query(userindex):
     return qry_result['data_result']
 
 
-def send_mail_if_not_empty(userindex, mailadress, **context):
-    qry_result = context['task_instance'].xcom_pull(task_ids='connect_and_query_{0}'.format(userindex))
+def send_mail_if_not_empty(mailadress, qry_result):
     if qry_result is None or len(qry_result) == 0:
         return None
 
@@ -73,8 +53,8 @@ def send_mail_if_not_empty(userindex, mailadress, **context):
     # refactor this
     mail_url = '{}/function/mail'.format(faas_url)  # prod
     mail_data = {
-        'recipient': [mailadress],
-        'cc': ['snir-y@regba.co.il', 'lior-r@regba.co.il'],
+        'recipient': ['snir-y@regba.co.il'],  # [mailadress],
+        # 'cc': ['snir-y@regba.co.il', 'lior-r@regba.co.il'],
         'subject': 'בחירת מעצבת לא תקינה בהזמנות משלימים - הודעה אוטומטית ',
         # notice mail_body_mashlim is global
         'content': mail_body_mashlim + r_table.content.decode('utf-8'),
@@ -87,20 +67,59 @@ def send_mail_if_not_empty(userindex, mailadress, **context):
     return r_mail.status_code
 
 
-dag = DAG('check_designer_mashlimim',
-          description='checks the choice of designer in orders of type mashlimim',
-          default_args=default_args,
-          schedule_interval='1 9 * * 0',
-          catchup=False)
 
-with dag:
-    start = DummyOperator(task_id='start')
-    for manager in default_args['Managers']:
+@dag(default_args=default_args, schedule_interval=None, start_date=days_ago(0))
+def check_designer_mashlimim():
+    @task()
+    def get_managers():
+        query_data = {'d_con': d_con,
+                    'qry': qry_get_managers}
+        r = requests.post('{}/function/mssql'.format(faas_url),
+                        data=json.dumps(query_data))
+        qry_result = r.json()
+        return qry_result['data_result']
+    
+    @task()
+    def get_orders(managers):
+        orders = {}
+        for m in managers:
+            data = connect_and_query(m['UserIndex'])
+            if data is not None:
+                orders[m['EmployeeEmail']] =  data      
+        return orders
+    
+    @task()
+    def send_mails(orders_by_manager):
+        for mail_adress in orders_by_manager.keys():
+            send_mail_if_not_empty('snir-y@regba.co.il', orders_by_manager[mail_adress])
+        return None
 
-        connectNquery_operator = PythonOperator(task_id='connect_and_query_{0}'.format(manager[0]), retries=3,
-                                                python_callable=connect_and_query, op_kwargs={'userindex': manager[0]}, dag=dag)
 
-        mail_operator = PythonOperator(task_id='send_mail_if_not_empty_{0}'.format(manager[0]),
-                                       python_callable=send_mail_if_not_empty, dag=dag, op_args=[manager[0], manager[1]], provide_context=True)
+    Managers = get_managers()
+    orders = get_orders(Managers)
+    send_mails(orders)
 
-        start >> connectNquery_operator >> mail_operator
+main_dag = check_designer_mashlimim()
+
+
+
+
+
+
+# dag = DAG('check_designer_mashlimim',
+#           description='checks the choice of designer in orders of type mashlimim',
+#           default_args=default_args,
+#           schedule_interval='1 9 * * 0',
+#           catchup=False)
+
+# with dag:
+#     start = DummyOperator(task_id='start')
+#     for manager in default_args['Managers']:
+
+#         connectNquery_operator = PythonOperator(task_id='connect_and_query_{0}'.format(manager[0]), retries=3,
+#                                                 python_callable=connect_and_query, op_kwargs={'userindex': manager[0]}, dag=dag)
+
+#         mail_operator = PythonOperator(task_id='send_mail_if_not_empty_{0}'.format(manager[0]),
+#                                        python_callable=send_mail_if_not_empty, dag=dag, op_args=[manager[0], manager[1]], provide_context=True)
+
+#         start >> connectNquery_operator >> mail_operator
