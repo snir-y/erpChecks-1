@@ -63,7 +63,7 @@ def send_mail_if_not_empty(to, cc, qry_result):
     mail_data = {
         'recipient': to, # list
         'cc': cc, #['snir-y@regba.co.il', 'lior-r@regba.co.il'],
-        'subject': 'הזמנות עם תאריך אספקה משוער לא תקין - הודעה אוטומטית ',
+        'subject': 'הזמנות עם תכנית א ',
         'content': mail_body_task_alef + r_table.content.decode('utf-8'),
         'attachments': [],
         'footer': 'DAG: ERPChecks -  check_orders_with_old_est_supplydate'
@@ -124,15 +124,15 @@ def commited_tasks_alef():
         return orders 
     
     @task()
-    def send_mails(orders):
+    def send_mails(orders, cc):
         for mail_adress in orders.keys():
-            send_mail_if_not_empty(to=[mail_adress], cc = ['snir-y@regba.co.il', 'lior-r@regba.co.il'] , qry_result = orders[mail_adress])
+            send_mail_if_not_empty(to=[mail_adress], cc = cc  , qry_result = orders[mail_adress])
             sleep(2)
         return None
     
     Managers = get_managers()
     manager_orders = get_orders_by_manager(Managers)
-    send_mails(manager_orders)
+    send_mails(manager_orders, ['snir-y@regba.co.il', 'lior-r@regba.co.il'])
     designer_orders = get_orders_by_designer(Managers)
     send_mails(designer_orders)
 
