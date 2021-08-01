@@ -133,7 +133,7 @@ def commited_tasks_alef():
     Managers = get_managers()
     manager_orders = get_orders_by_manager(Managers)
     send_mails(manager_orders, ['snir-y@regba.co.il', 'lior-r@regba.co.il'])
-    designer_orders = get_orders_by_designer(Managers)
+    designer_orders = get_orders_by_designer(Managers, [])
     send_mails(designer_orders)
 
 main_dag = commited_tasks_alef()
