@@ -38,8 +38,6 @@ def connect_and_query(userindex):
     qry_result = r.json()
     if qry_result is None:
         return None
-
-# print(qry_result)
     return qry_result['data_result']
 
 
@@ -68,7 +66,7 @@ def send_mail_if_not_empty(mailadress, qry_result):
 
 
 
-@dag(default_args=default_args, schedule_interval=None, start_date=days_ago(0))
+@dag(default_args=default_args, schedule_interval='1 9 * * 0', start_date=days_ago(0))
 def check_designer_mashlimim():
     @task()
     def get_managers():
@@ -101,25 +99,3 @@ def check_designer_mashlimim():
 
 main_dag = check_designer_mashlimim()
 
-
-
-
-
-
-# dag = DAG('check_designer_mashlimim',
-#           description='checks the choice of designer in orders of type mashlimim',
-#           default_args=default_args,
-#           schedule_interval='1 9 * * 0',
-#           catchup=False)
-
-# with dag:
-#     start = DummyOperator(task_id='start')
-#     for manager in default_args['Managers']:
-
-#         connectNquery_operator = PythonOperator(task_id='connect_and_query_{0}'.format(manager[0]), retries=3,
-#                                                 python_callable=connect_and_query, op_kwargs={'userindex': manager[0]}, dag=dag)
-
-#         mail_operator = PythonOperator(task_id='send_mail_if_not_empty_{0}'.format(manager[0]),
-#                                        python_callable=send_mail_if_not_empty, dag=dag, op_args=[manager[0], manager[1]], provide_context=True)
-
-#         start >> connectNquery_operator >> mail_operator

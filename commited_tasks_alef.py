@@ -76,7 +76,7 @@ def send_mail_if_not_empty(to, cc, qry_result):
 
 # ============== Operators =================
 
-@dag(default_args=default_args, schedule_interval=None, start_date=days_ago(0))
+@dag(default_args=default_args, schedule_interval='1 22 * * *', start_date=days_ago(0))
 def commited_tasks_alef():
     
     @task
