@@ -60,7 +60,7 @@ def send_mail_if_not_empty(mailadress, qry_result):
     return r_mail.status_code
 
 
-@dag(default_args=default_args, schedule_interval='30 8 * * 0', start_date=days_ago(0))
+@dag(default_args=default_args, schedule_interval='30 8 * * 0')
 def check_orders_with_old_est_supply_date():
     @task()
     def get_managers():

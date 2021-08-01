@@ -66,7 +66,7 @@ def send_mail_if_not_empty(mailadress, qry_result):
 
 
 
-@dag(default_args=default_args, schedule_interval='1 9 * * 0', start_date=days_ago(0))
+@dag(default_args=default_args, schedule_interval='1 9 * * 0')
 def check_designer_mashlimim():
     @task()
     def get_managers():

@@ -61,7 +61,7 @@ def send_mail_if_not_empty(mailadress, qry_result):
 
 
 
-@dag(default_args=default_args, schedule_interval='15 9 * * 0', start_date=days_ago(0))
+@dag(default_args=default_args, schedule_interval='15 9 * * 0')
 def check_orders_with_upcoming_est_supply_date():
     @task()
     def get_managers():
