@@ -12,7 +12,7 @@ from erpChecks.mail_body import mail_body_mashlim
 default_args = {
     'owner': 'Snir',
     'depends_on_past': False,
-    'start_date': datetime(2020, 5, 18),
+    'start_date': datetime(2021, 8, 7),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 0,
