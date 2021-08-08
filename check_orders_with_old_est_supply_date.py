@@ -16,7 +16,8 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 0,
-    'retry_delay': timedelta(minutes=1)
+    'retry_delay': timedelta(minutes=1),
+    'catchup': False
 }
 
 faas_url = 'http://' + os.environ['LOCAL_SRV_IP'] + ':8080'  # prod
