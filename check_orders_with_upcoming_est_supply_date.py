@@ -11,7 +11,7 @@ from erpChecks.mail_body import mail_body_upcoming_supplydate
 default_args = {
     'owner': 'Snir',
     'depends_on_past': False,
-    'start_date': datetime(2020, 8, 9),
+    'start_date': datetime(2021, 8, 7),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 0,
