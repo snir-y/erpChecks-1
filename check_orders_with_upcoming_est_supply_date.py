@@ -48,7 +48,7 @@ def send_mail_if_not_empty(mailadress, qry_result):
     mail_url = '{}/function/mail'.format(faas_url)  # prod
     mail_data = {
         'recipient': [mailadress],
-        'cc': ['snir-y@regba.co.il' ,  'lior-r@regba.co.il'],
+        'cc': ['snir-y@regba.co.il'],
         'subject': 'הזמנות שמתקרבות לתאריך האספקה המשוער שלהן - הודעה אוטומטית ',
         # notice mail_body_old_supplydate is global
         'content': mail_body_upcoming_supplydate + r_table.content.decode('utf-8'),
